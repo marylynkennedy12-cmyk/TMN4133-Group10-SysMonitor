@@ -305,7 +305,7 @@ This is **normal behavior** when the system is idle, especially in WSL environme
 
 ## 📄 License
 
-This project is created for educational purposes as part of TMN4133 System Programming course requirements at [Your University Name].
+This project is created for educational purposes as part of TMN4133 System Programming course requirements UNIMAS.
 
 **Academic Integrity Notice:** This code is submitted as coursework. Please do not copy or reuse without proper attribution.
 
