@@ -14,6 +14,128 @@
 
 volatile sig_atomic_t stop_flag = 0;
 
+//Implement write_log-Member 3
+void write_log(const char *mode, const char *msg)
+{
+	FILE *f = fopen(LOGFILE, "a");
+	if (!f) return;
+
+	time_t t = time(NULL);
+	char ts[64];
+	strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", localtime(&t));
+	fprintf(f, "[%s] MODE=%s: %s\n", ts, mode, msg);
+	fclose(f);
+	fprintf(stderr, "LOGGING: %s\n", msg);
+}
+
+//Implement listTopProcess- Member 3
+typedef struct
+{
+	int pid;
+	char name[256];
+	double cpu;
+} ProcInfo;
+
+double readProcCPU(int pid)
+{
+	char path[64];
+	sprintf(path,"/proc/%d/stat", pid);
+
+	FILE *f = fopen(path, "r");
+	if (!f) return 0;
+	
+	long utime, stime;
+	long long starttime;
+	int i;
+
+	FILE *fu = fopen("/proc/uptime", "r");
+	if (!fu)
+	{
+		fclose(f);
+		return 0;
+	}
+
+	long long uptime;
+	fscanf(fu, "%lld", &uptime);
+	fclose(fu);
+
+	char comm[256];
+        fscanf(f, "%d %s", &i, comm);
+        for (int x = 0; x < 11; x++) fscanf(f, "%*s"); // skip fields
+
+        fscanf(f, "%ld %ld", &utime, &stime); // fields 14 & 15
+        for (int x = 0; x < 4; x++) fscanf(f, "%*s");
+        fscanf(f, "%lld", &starttime);           // field 22
+        fclose(f);
+
+        double total_time = utime + stime;
+        double seconds = uptime - (starttime / sysconf(_SC_CLK_TCK));
+
+        if (seconds <= 0) return 0;
+        return 100.0 * ((total_time / sysconf(_SC_CLK_TCK)) / seconds);
+}
+
+void listTopProcesses()
+{
+	DIR *d = opendir("/proc");
+	if (!d)
+	{
+		perror("Error opening /proc");
+		return;
+	}
+
+	struct dirent *ent;
+	ProcInfo list[512];
+	int count = 0;
+
+	while ((ent = readdir(d)))
+	{
+		if (!isdigit(ent -> d_name[0])) continue;
+
+		int pid = atoi(ent -> d_name);
+		char commPath[64];
+		sprintf(commPath, "/proc/%d/comm", pid);
+		
+		FILE *f = fopen(commPath, "r");
+		if (!f) continue;
+
+		fgets(list[count].name, sizeof(list[count].name), f);
+		list[count].name[strcspn(list[count].name, "\n")] = 0;
+		fclose(f);
+		list[count].pid = pid;
+		list[count].cpu = readProcCPU(pid);
+		count++;
+		if (count >= 512) break;
+	}
+	closedir(d);
+
+	//Sort by CPU usage desc
+	for (int i = 0; i < count; i++)
+	{
+		for (int j = i+1; j < count; j++)
+		{
+			if (list[j].cpu > list[i].cpu)
+			{
+				ProcInfo tmp = list[i];
+				list[i] = list[j];
+				list[j] = tmp;
+			}
+		}
+	}
+
+	printf("Top 5 Active Processes: \n");
+	char msg[512];
+	//Header for log clarity
+	write_log("proc", "--- Top 5 processes start ---");
+	
+	for (int i = 0; i < 5 && i < count; i++)
+	{
+		snprintf(msg, sizeof(msg), "PID=%d | %s | CPU=%.2f%%", list[i].pid, list[i].name, list[i].cpu);
+		printf("%s\n", msg);
+		write_log("proc", msg);
+	}
+}
+
 //Implement Continuous Monitoring Mode-Member 1
 void continuousMonitor(int interval) {
     write_log("continuous", "Continuous monitoring started");
